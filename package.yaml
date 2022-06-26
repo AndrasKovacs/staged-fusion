@@ -1,0 +1,40 @@
+
+
+name:        staged-fusion
+version:     0.1.0.0
+license:     MIT
+category:    Data
+description: "Staged push/pull stream fusion"
+author:      "András Kovács"
+maintainer:  "puttamalac@gmail.com"
+copyright:   "2022 András Kovács"
+
+
+dependencies:
+- base >= 4.7 && < 5
+
+flags:
+  dump:
+    description: dump core, stg and cmm to files
+    default: false
+    manual: true
+
+when:
+  - condition: flag(dump)
+    ghc-options:
+      - -ddump-simpl
+      - -ddump-stg-final
+      - -ddump-cmm
+      - -dsuppress-all
+      - -dno-suppress-type-signatures
+      - -ddump-splices
+      - -ddump-to-file
+
+library:
+  source-dirs:
+    - .
+  dependencies:
+    - template-haskell
+    - primdata
+  ghc-options:
+    - -O

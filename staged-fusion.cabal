@@ -1,0 +1,41 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+
+name:           staged-fusion
+version:        0.1.0.0
+description:    Staged push/pull stream fusion
+category:       Data
+author:         András Kovács
+maintainer:     puttamalac@gmail.com
+copyright:      2022 András Kovács
+license:        MIT
+build-type:     Simple
+
+flag dump
+  description: dump core, stg and cmm to files
+  manual: True
+  default: False
+
+library
+  exposed-modules:
+      Gen
+      Notes
+      Pull
+      Push
+      StrymonasBench
+      Up
+  other-modules:
+      Paths_staged_fusion
+  hs-source-dirs:
+      ./
+  ghc-options: -O
+  build-depends:
+      base >=4.7 && <5
+    , primdata
+    , template-haskell
+  if flag(dump)
+    ghc-options: -ddump-simpl -ddump-stg-final -ddump-cmm -dsuppress-all -dno-suppress-type-signatures -ddump-splices -ddump-to-file
+  default-language: Haskell2010
