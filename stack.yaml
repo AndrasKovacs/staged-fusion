@@ -6,4 +6,4 @@ packages:
 
 extra-deps:
 - git: https://github.com/AndrasKovacs/primdata.git
-  commit: d0234da40ffcd6aecd2fc817e5c4e07c42d4edc8
+  commit: 4a7ed6b807a367a90c8dffaf1e98c3a0d0c28c32

@@ -24,7 +24,9 @@ library
       Gen
       Notes
       Pull
+      Pull2
       Push
+      Push2
       StrymonasBench
       Up
   other-modules:

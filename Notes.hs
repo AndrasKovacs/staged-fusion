@@ -1,7 +1,7 @@
 
 {-# language
   TemplateHaskell, RankNTypes, BlockArguments, CPP, ScopedTypeVariables,
-  TypeApplications, QualifiedDo
+  TypeApplications, QualifiedDo, Strict
   #-}
 
 module Notes where
@@ -10,19 +10,23 @@ import Control.Monad
 
 import Up(Up)
 import qualified Up as U
-import Push(Push, pull)
+import Push(Push)
 import Pull(Pull)
-import qualified Push as PS
-import qualified Pull as PL
+import qualified Push2 as PS
+import qualified Pull2 as PL
 
 import qualified Data.Array.FI as AFI
 
--- arrmap :: AFI.Array Int -> AFI.Array Int
--- arrmap xs = $$(
---   PL.toAFI $
---   PL.map (+100) $
---   PL.map (+100) $
---   PL.fromAFI [||xs||])
+arrmap :: AFI.Array Int -> AFI.Array Int
+arrmap xs = $$(
+  PL.toAFI $
+  PL.map (+100) $
+  PL.map (+100) $
+  PL.fromAFI [||xs||])
+
+-- foo :: Int -> Int -> AFI.Array Int
+-- foo x y = $$(PS.toAFI $ PS.range [||x||] [||y||])
+
 
 -- fromafi :: AFI.Array Int -> Int
 -- fromafi xs = $$(

@@ -50,9 +50,9 @@ range lo hi = pure $
 rangeStep :: Up Int -> Up Int -> Up Int -> Pull Int
 rangeStep lo hi step = pure $ Pull (U.tup3 lo hi step) \s stop yield ->
   U.bindTup3 s \lo hi step ->
-    U.bool (lo U.>= hi)
+    U.bool ((lo :: Up Int) U.>= (hi :: Up Int))
            stop
-           (yield lo (U.tup3 (lo U.+ step) hi step))
+           (yield lo (U.tup3 (lo U.+ (step :: Up Int)) hi step))
 
 zipWith :: (Up a -> Up b -> Up c) -> Pull a -> Pull b -> Pull c
 zipWith f pa pb = do
@@ -81,8 +81,9 @@ take n pa = do
   pure $ Pull (U.pair seed n) \s stop yield -> [||
           case $$s of
             U.Pair s n ->
-              if n <= 0 then $$stop
-                        else $$(step [||s||] stop (\a s -> yield a (U.pair s ([||n||]-1))))
+              if (n ::Int) <= 0
+                 then $$stop
+                 else $$(step [||s||] stop (\a s -> yield a (U.pair s ([||n||]-1))))
           ||]
 
 foldl :: (Up b -> Up a -> Up b) -> Up b -> Pull a -> Up b
@@ -141,7 +142,7 @@ fromAFI as =
   ilet' [|| AFI.size $$as ||] \size ->
   pure $ Pull (U.tup3 as (0 :: Up Int) size) \s stop yield ->
     [|| case $$s of
-          U.Tup3 as i size -> if i < size
+          U.Tup3 as i size -> if i < (size ::Int)
             then let a = as AFI.! i
                  in seq a $$(yield [||a||] (U.tup3 [||as||] ([||i||] + 1) [||size||]))
             else $$stop

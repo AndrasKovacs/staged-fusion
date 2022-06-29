@@ -1,7 +1,7 @@
 
 {-# language
   TemplateHaskell, TypeFamilies, BlockArguments, RankNTypes, ScopedTypeVariables,
-  MagicHash, UnboxedTuples
+  MagicHash, UnboxedTuples, QualifiedDo
   #-}
 
 module Push where
@@ -10,6 +10,8 @@ import Data.Flat
 import IO
 import qualified Data.Array.FI as AFI
 import qualified Data.Array.FM as AFM
+import qualified Data.Array.LI as ALI
+import qualified Data.Array.LM as ALM
 
 import GHC.Exts
 
@@ -40,6 +42,12 @@ infixl 1 >>=
 (>>=) :: Push a -> (Up a -> Push b) -> Push b
 (>>=) as f = Push \c n -> fold as (\a bs -> fold (f a) c bs) n
 
+concatMap :: (Up a -> Push b) -> Push a -> Push b
+concatMap f as = as Push.>>= f
+
+map2 :: (Up a -> Up b -> Up c) -> Push a -> Push b -> Push c
+map2 f as bs = Push.do {a <- as; b <- bs; Push.pure $ f a b}
+
 infixl 1 >>
 (>>) :: Push a -> Push b -> Push b
 (>>) as bs = as Push.>>= \_ -> bs
@@ -53,7 +61,6 @@ filter f as = Push \c n -> fold as (\a as -> U.bool (f a) (c a as) as) n
 foldl :: (Up b -> Up a -> Up b) -> Up b -> Push a -> Up b
 foldl f b as =
   [||$$(fold as (\a hyp -> [||\ b -> seq b ($$hyp $$(f [||b||] a)) ||]) [||\ b -> seq b b||]) $$b||]
-
 
 foldr :: (Up a -> Up b -> Up b) -> Up b -> Push a -> Up b
 foldr f b as = fold as f b
@@ -69,20 +76,25 @@ head as = fold as (\a _ -> a) [||error "head: empty Push"||]
 
 range :: Up Int -> Up Int -> Push Int
 range lo hi = Push \c n -> [||
-  let go lo hi | lo >= hi  = $$n
+  let go lo hi | (lo :: Int) >= (hi :: Int)  = $$n
                | otherwise = $$(c [||lo||] [||go (lo + 1) hi||])
   in go $$lo $$hi ||]
 
+countFrom :: Up Int -> Push Int
+countFrom lo = Push \c n -> [||
+  let go i = seq (i::Int) $$(c [||i||] [||go (i + 1)||])
+  in go $$lo ||]
+
 take :: Up Int -> Push a -> Push a
 take i as = Push \c n ->
-  [|| $$(fold as (\a hyp -> [|| \(i::Int) ->
-                     if i <= 0 then $$n else $$(c a [||$$hyp $!(i-1)||]) ||])
+  [|| $$(fold as (\a hyp -> [|| \i ->
+                     if (i::Int) <= 0 then $$n else $$(c a [||$$hyp $!(i-1)||]) ||])
                  [|| \i -> seq i $$n||]) $$i ||]
 
 drop :: Up Int -> Push a -> Push a
 drop i as = Push \c n ->
-  [|| $$(fold as (\a hyp -> [|| \(i::Int) ->
-                     if i <= 0
+  [|| $$(fold as (\a hyp -> [|| \i ->
+                     if (i :: Int) <= 0
                        then $$(c a [||$$hyp 0||])
                        else $$hyp $! (i-1) ||])
                  [|| \i -> seq i $$n||]) $$i ||]
@@ -99,8 +111,8 @@ toList as = fold as (U.qt2 [||(:)||]) [||[]||]
 toList' :: Push a -> Up [a]
 toList' as = fold as (\a as -> [|| ((:) $! $$a) $! $$as ||]) [||[]||]
 
-pull :: Pull a -> Push a
-pull as = Push \c n -> run do
+fromPull :: Pull a -> Push a
+fromPull as = Push \c n -> run do
   Pull.Pull seed step <- as
   Prelude.pure [||
     let go s = seq s ($$(step [||s||] n (\a s -> c a [||go $$s||])))
@@ -118,8 +130,8 @@ fromAFI :: Flat a => Up (AFI.Array a) -> Push a
 fromAFI as = Push \c n -> [||
   let as' = $$as
       s   = AFI.size as'
-      go i s as | i >= s = seq as $$n
-                | True   = let x = as AFI.! i; in seq x $$(c [||x||] [||go (i + 1) s as||])
+      go i s as | (i::Int) >= s = seq as $$n
+                | True          = let x = as AFI.! i; in seq x $$(c [||x||] [||go (i + 1) s as||])
   in seq as' (seq s (go 0 s as')) ||]
 
 data ToAFI a = ToAFI !(AFM.Array a) !Int !(State# RealWorld)
@@ -137,6 +149,33 @@ toAFI as = [||
         ||])
      [||\l w -> case unIO (AFM.new l) w of (# w, marr #) -> ToAFI marr l w||])
      (0::Int) realWorld# of
-    ToAFI arr _ w -> case unIO (AFM.unsafeFreeze arr) w of
-      (# _, arr #) -> arr
+       ToAFI arr _ w -> case unIO (AFM.unsafeFreeze arr) w of
+         (# _, arr #) -> arr
+  ||]
+
+fromALI :: Up (ALI.Array a) -> Push a
+fromALI as = Push \c n -> [||
+  let as' = $$as
+      s   = ALI.size as'
+      go i s as | (i :: Int) >= s = seq as $$n
+                | True            = let x = as ALI.! i; in seq x $$(c [||x||] [||go (i + 1) s as||])
+  in seq as' (seq s (go 0 s as')) ||]
+
+data ToALI a = ToALI !(ALM.Array a) !Int !(State# RealWorld)
+
+toALI :: Push a -> Up (ALI.Array a)
+toALI as = [||
+  case $$(fold as
+     (\a hyp -> [||\l w ->
+        let x = $$a; l' = l + 1
+        in case seq x (seq l' ($$hyp l' w)) of
+          ToALI marr l w ->
+            let l' = l - 1
+            in case unIO (ALM.write marr l' x) w of
+              (# w, _ #) -> ToALI marr l' w
+        ||])
+     [||\l w -> case unIO (ALM.new l undefined) w of (# w, marr #) -> ToALI marr l w||])
+     (0::Int) realWorld# of
+       ToALI arr _ w -> case unIO (ALM.unsafeFreeze arr) w of
+         (# _, arr #) -> arr
   ||]
