@@ -21,13 +21,11 @@ flag dump
 
 library
   exposed-modules:
+      Benchmark
       Gen
-      Notes
+      Internal
       Pull
-      Pull2
       Push
-      Push2
-      StrymonasBench
       Up
   other-modules:
       Paths_staged_fusion

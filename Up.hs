@@ -4,12 +4,20 @@
   MonoLocalBinds, FlexibleInstances, ConstraintKinds #-}
 {-# options_ghc -Wno-orphans #-}
 
+{-|
+  This module defines `Up` as a synonym of `CodeQ`, the basic type used in typed
+  Template Haskell.  It also redefines a fragment of Prelude where everything is
+  lifted to operate on @Up a@ instead of @a@.  The Prelude fragment is rather
+  ad-hoc, guided by I needed in examples and benchmarks.
+-}
+
 module Up (
   module Up,
   Lift(..)
   )where
 
 import qualified Prelude as P
+import qualified Data.Bits as P
 import Data.Bits
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
@@ -78,11 +86,29 @@ negate = P.negate
 abs    = P.abs
 signum = P.signum
 
-even :: Up P.Int -> Up P.Bool
-even n = [|| case $$n .&. 1 of 0 -> P.True; _ -> P.False ||]
+even :: (P.Bits a, P.Num a) => Up a -> Up P.Bool
+even n = [|| $$n .&. 1 P.== 0 ||]
 
-odd :: Up P.Int -> Up P.Bool
-odd n = [|| case $$n .&. 1 of 0 -> P.False; _ -> P.True ||]
+odd :: (P.Bits a, P.Num a) => Up a -> Up P.Bool
+odd n = [|| $$n .&. 1 P.== 1 ||]
+
+class Integral a where
+  quot :: Up a -> Up a -> Up a
+  rem :: Up a -> Up a -> Up a
+  div :: Up a -> Up a -> Up a
+  mod :: Up a -> Up a -> Up a
+  quotRem :: Up a -> Up a -> Up (a, a)
+  divMod :: Up a -> Up a -> Up (a, a)
+  toInteger :: Up a -> Up P.Integer
+
+instance P.Integral a => Integral a where
+  quot      = qt2[||P.quot||]
+  rem       = qt2[||P.rem||]
+  div       = qt2[||P.div||]
+  mod       = qt2[||P.mod||]
+  quotRem   = qt2[||P.quotRem||]
+  divMod    = qt2[||P.divMod||]
+  toInteger = qt1[||P.toInteger||]
 
 true :: Up P.Bool
 true = [||P.True||]
