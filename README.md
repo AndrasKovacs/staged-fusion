@@ -549,7 +549,7 @@ cases instead of four.
 In this repo we don't have the following operations:
 
     (<>)  :: Pull a -> Pull a -> Pull a
-	(>>=) :: Pull a -> (a -> Pull b) -> Pull b
+	(>>=) :: Pull a -> (Up a -> Pull b) -> Pull b
 
 Users should instead convert from `Pull` to `Push`, and then bind or append
 there. What's the reason for this?
