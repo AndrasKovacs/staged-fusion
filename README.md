@@ -490,7 +490,7 @@ definition of `Step`:
 
     data Step a s = Stop | Yield a s | Skip s
 
-The, we take the appropriate fusible representation of `Up (Step a s)`. With
+Then, we take the appropriate fusible representation of `Up (Step a s)`. With
 this, filtering can be defined as converting all `Yield`-s in the input stream
 to `Skip`-s in the output, whenever the filtering predicate is false.
 
