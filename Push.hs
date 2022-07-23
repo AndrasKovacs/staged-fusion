@@ -66,6 +66,7 @@ instance Semigroup (Push a) where
 instance Monoid (Push a) where
   mempty = return $ Push' (Just 0) (\c n -> n)
 
+-- | Prepend a value.
 cons :: Up a -> Push a -> Push a
 cons a as = do
   as <- as
@@ -76,9 +77,13 @@ map f as = do
   as <- as
   return $ Push' (len as) (\c n -> fold as (\a bs -> c (f a) bs) n)
 
+-- | Create a singleton `Push`.
 pure :: Up a -> Push a
 pure a = return $ Push' (Just 1) (\c n -> c a n)
 
+-- | "Monadic" binding. It's not actually monadic because the type isn't right.
+--   Rather, `Push` is a relative monad, relative to `Up`. Similarly `Push`
+--   is a relative Functor, Applicative, etc.
 infixl 1 >>=
 (>>=) :: Push a -> (Up a -> Push b) -> Push b
 (>>=) as f = do
@@ -120,6 +125,7 @@ prod = Push.foldl (*) 1
 head :: Push a -> Up a
 head as = foldPush as (\a _ -> a) [||error "head: empty Push"||]
 
+-- | Count from the first argument to the second one.
 range :: Up Int -> Up Int -> Push Int
 range lo hi = return $ Push' (Just (U.max 0 (hi - lo))) \c n -> [||
   let go lo hi | (lo :: Int) >= (hi :: Int)  = $$n
@@ -134,11 +140,13 @@ for start step cont = return $ Push' Nothing \c n -> [||
   in go $$start
   ||]
 
+-- | Count up infinitely from the argument.
 countFrom :: Up Int -> Push Int
 countFrom lo = return $ Push' Nothing \c n -> [||
   let go i = seq (i::Int) $$(c [||i||] [||go (i + 1)||])
   in go $$lo ||]
 
+-- | Count up infinitely from the argument by given increments.
 countFromStep :: Up Int -> Up Int -> Push Int
 countFromStep lo step = return $ Push' Nothing \c n -> [||
   let go i step = seq (i::Int) (seq (step :: Int) $$(c [||i||] [||go (i + step) step||]))
@@ -168,12 +176,15 @@ fromList as = return $ Push' (Just [||length $$as||]) \c n -> [||
       go (a:as) = $$(c [||a||] [||go as||])
   in go $$as ||]
 
+-- | Lazy conversion to lists.
 toList :: Push a -> Up [a]
 toList as = foldPush as (U.qt2 [||(:)||]) [||[]||]
 
+-- | Conversion which is strict in the list elements.
 toList' :: Push a -> Up [a]
 toList' as = foldPush as (\a as -> [|| ((:) $! $$a) $$as ||]) [||[]||]
 
+-- | Conversion which is strict in the list elements and also the list itself.
 toList'' :: Push a -> Up [a]
 toList'' as = foldPush as (\a as -> [|| ((:) $! $$a) $! $$as ||]) [||[]||]
 
@@ -191,6 +202,8 @@ toPull' = PL.fromALI . Push.toALI
 toPullFlat :: Flat a => Push a -> Pull a
 toPullFlat = PL.fromAFI . Push.toAFI
 
+-- | Convert from `Pull` to `Push`. This is efficient and doesn't require
+--   buffering.
 fromPull :: Pull a -> Push a
 fromPull as = do
   PL.Pull' len seed step <- as
@@ -198,12 +211,14 @@ fromPull as = do
     [|| let go s = seq s ($$(step [||s||] n (\a s -> c a [||go $$s||])))
         in go $$seed ||]
 
+-- | Zip together a `Push` and a `Pull`. This is efficient and doesn't require
+--   buffering.
 zipWithPull :: (Up a -> Up b -> Up c) -> Push a -> Pull b -> Push c
 zipWithPull f as bs = do
-  Push' len foldas <- as
+  Push' len fold <- as
   PL.Pull' len' seed step <- bs
   return $ Push' (U.min <$> len <*> len') \c n ->
-    [|| $$(foldas
+    [|| $$(fold
          (\a hyp -> [|| \s -> seq s ($$(step [||s||] n (\b s -> c (f a b) [|| $$hyp $$s ||]))) ||])
          [|| \s -> seq s $$n ||])
          $$seed ||]
@@ -212,6 +227,7 @@ zipWithPull f as bs = do
 -- Primitive array conversions
 --------------------------------------------------------------------------------
 
+-- | Convert from a flat immutable array.
 fromAFI :: Flat a => Up (AFI.Array a) -> Push a
 fromAFI as =
   ilet' as \as ->
@@ -221,6 +237,7 @@ fromAFI as =
                      | True          = let x = as AFI.! i; in seq x $$(c [||x||] [||go (i + 1) s as||])
        in go 0 $$size $$as ||]
 
+-- | Convert from a lifted immutable array.
 fromALI :: Up (ALI.Array a) -> Push a
 fromALI as =
   ilet' as \as ->
@@ -230,6 +247,7 @@ fromALI as =
                   | True            = let x = as ALI.! i; in seq x $$(c [||x||] [||go (i + 1) s as||])
     in go 0 $$size $$as ||]
 
+-- | Convert to a flat immutable array.
 toAFI :: forall a. Flat a => Push a -> Up (AFI.Array a)
 toAFI as = run do
   as <- as
@@ -267,7 +285,7 @@ toAFI as = run do
         in cont $! $$len
        ||]
 
-
+-- | Convert to a lifted immutable array.
 toALI :: forall a. Push a -> Up (ALI.Array a)
 toALI as = run do
   as <- as

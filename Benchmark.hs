@@ -18,6 +18,11 @@ import qualified Up as U
 Benchmarks, partly by me, partly borrowed from
    - "Stream Fusion, to Completeness": https://arxiv.org/pdf/1612.06668.pdf
 
+Although it's called "Benchmark.hs", what we test is not the performance, but
+instead the quality of generated Core code, where quality is determined by
+eyeballing. It would be fun to write actual performance benchmarks and compare
+to other fusion libraries.
+
 When it's possible, I write both a push and a pull definition.
 
 I also write Data.List definitions for purely Push definitions. These should

@@ -22,7 +22,6 @@ flag dump
 library
   exposed-modules:
       Benchmark
-      Bug
       Gen
       Internal
       Notes

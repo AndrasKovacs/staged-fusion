@@ -40,8 +40,8 @@ type Step a s = forall r. Up r -> (Up a -> Up s -> Up r) -> Up r
 data Pull' a = forall s. Pull' {len :: Maybe (Up Int), seed :: Up s, step :: Up s -> Step a s}
 type Pull a = Gen (Pull' a)
 
-drop# :: Up Int -> (Up s -> Step a s) -> Up s -> Gen (Up s)
-drop# n step s = Gen \ret -> [||
+dropState :: Up Int -> (Up s -> Step a s) -> Up s -> Gen (Up s)
+dropState n step s = Gen \ret -> [||
   let go n s | n <= (0::Int) = seq s $$(ret [||s||])
              | otherwise     = $$(step [||s||] (ret [||s||]) (\_ s -> [||go (n - 1) $$s||]))
   in go $$n $$s ||]
@@ -49,7 +49,7 @@ drop# n step s = Gen \ret -> [||
 drop :: Up Int -> Pull a -> Pull a
 drop n pa = do
   Pull' len seed step <- pa
-  seed <- drop# n step seed
+  seed <- dropState n step seed
   pure $ Pull' (U.max 0 <$> ((-) <$> len <*> Just n)) seed step
 
 map :: (Up a -> Up b) -> Pull a -> Pull b
@@ -57,6 +57,7 @@ map f pa = do
   Pull' len seed step <- pa
   pure $ Pull' len seed \s stop yield -> step s stop \a s -> yield (f a) s
 
+-- | Count from the first argument to the second one.
 range :: Up Int -> Up Int -> Pull Int
 range lo hi = pure $
   Pull' (Just (U.max 0 (hi - lo))) (U.pair lo hi) \s stop yield ->
@@ -65,9 +66,11 @@ range lo hi = pure $
              stop
              (yield curr (U.pair (curr U.+ 1) hi))
 
+-- | Count up infinitely from the argument.
 countFrom :: Up Int -> Pull Int
 countFrom i = pure $ Pull' Nothing i \s stop yield -> yield s (s + 1)
 
+-- | Count up infinitely from the argument by given increments.
 countFromStep :: Up Int -> Up Int -> Pull Int
 countFromStep i step = pure $ Pull' Nothing i \s stop yield -> yield s (s + step)
 
@@ -103,15 +106,15 @@ zipWith3 f as bs cs = do
             yield (f a b c) (U.tup3 as bs cs)
 
 
-find# :: (Up a -> Up Bool) -> (Up s -> Step a s) -> Up s -> Step a s
-find# f step s stop yield = [||
+find :: (Up a -> Up Bool) -> (Up s -> Step a s) -> Up s -> Step a s
+find f step s stop yield = [||
    let go s = $$(step [||s||] stop (\a s -> U.bool (f a) (yield a s) [||go $$s||]))
    in  go $$s ||]
 
 filter :: (Up a -> Up Bool) -> Pull a -> Pull a
 filter f pa = do
   Pull' _ seed step <- pa
-  pure $ Pull' Nothing seed (find# f step)
+  pure $ Pull' Nothing seed (find f step)
 
 take :: Up Int -> Pull a -> Pull a
 take n pa = do
@@ -124,13 +127,13 @@ take n pa = do
                  else $$(step [||s||] stop (\a s -> yield a (U.pair s ([||n||]-1))))
           ||]
 
-foldl# :: (Up b -> Up a -> Up b) -> Up b -> Pull' a -> Up b
-foldl# f b (Pull' _ seed step) =
+goFoldl :: (Up b -> Up a -> Up b) -> Up b -> Pull' a -> Up b
+goFoldl f b (Pull' _ seed step) =
   [|| let go s b = seq b $$(step [||s||] [||b||] (\a s -> [|| go $$s $$(f [||b||] a) ||]))
       in go $$seed $$b ||]
 
 foldl :: (Up b -> Up a -> Up b) -> Up b -> Pull a -> Up b
-foldl f b pa = run (pure . foldl# f b =<< pa)
+foldl f b pa = run (pure . goFoldl f b =<< pa) where
 
 sum :: (U.Num a) => Pull a -> Up a
 sum = Pull.foldl (+) 0
@@ -143,15 +146,15 @@ takeWhile f pa = do
   Pull' _ seed step <- pa
   pure $ Pull' Nothing seed \s stop yield -> step s stop \a s -> U.bool (f a) (yield a s) stop
 
-dropWhile# :: (Up a -> Up Bool) -> (Up s -> Step a s) -> Up s -> Gen (Up s)
-dropWhile# f step s = Gen \ret -> [||
+dropWhileState :: (Up a -> Up Bool) -> (Up s -> Step a s) -> Up s -> Gen (Up s)
+dropWhileState f step s = Gen \ret -> [||
    let go s = $$(step [||s||] (ret [||s||]) (\a s -> U.bool (f a) [||go $$s||] (ret s)))
    in  go $$s ||]
 
 dropWhile :: (Up a -> Up Bool) -> Pull a -> Pull a
 dropWhile f pa = do
   Pull' _ seed step <- pa
-  seed <- dropWhile# f step seed
+  seed <- dropWhileState f step seed
   pure $ Pull' Nothing seed step
 
 fromList :: Up [a] -> Pull a
@@ -164,23 +167,24 @@ length :: Pull a -> Up Int
 length as = run do
   as <- as
   case len as of
-    Nothing  -> pure $ foldl# (\acc _ -> acc + 1) 0 as
+    Nothing  -> pure $ goFoldl (\acc _ -> acc + 1) 0 as
     Just len -> pure len
 
+-- | Lazy conversion to lists.
 toList :: Pull a -> Up [a]
 toList pa = run do
   Pull' len seed step <- pa
   pure [|| let go s = seq s ($$(step [||s||] [||[]||] (\ a s -> [|| $$a : go $$s ||])))
            in go $$seed ||]
 
--- | Strict in elements and the list.
+-- | Conversion which is strict in the list elements.
 toList' :: Pull a -> Up [a]
 toList' pa = run do
   Pull' len seed step <- pa
   pure [|| let go s = seq s ($$(step [||s||] [||[]||] (\ a s -> [|| ((:) $! $$a) (go $$s) ||])))
            in go $$seed ||]
 
--- | Strict in elements and the list.
+-- | Conversion which is strict in the list elements and also the list itself.
 toList'' :: Pull a -> Up [a]
 toList'' pa = run do
   Pull' len seed step <- pa
@@ -191,6 +195,7 @@ toList'' pa = run do
 -- Primitive array conversions
 --------------------------------------------------------------------------------
 
+-- | Convert from a flat immutable array.
 fromAFI :: Flat a => Up (AFI.Array a) -> Pull a
 fromAFI as =
   ilet' as \as ->
@@ -203,6 +208,7 @@ fromAFI as =
             else $$stop
      ||]
 
+-- | Convert from a lifted immutable array.
 fromALI :: Up (ALI.Array a) -> Pull a
 fromALI as =
   ilet' as \as ->
@@ -215,6 +221,7 @@ fromALI as =
             else $$stop
      ||]
 
+-- | Convert to a flat immutable array.
 toAFI :: Flat a => Pull a -> Up (AFI.Array a)
 toAFI as = run do
   Pull' len seed step <- as
@@ -257,6 +264,7 @@ toAFI as = run do
         in cont $! $$len
       ||]
 
+-- | Convert to a lifted immutable array.
 toALI :: Pull a -> Up (ALI.Array a)
 toALI as = run do
   Pull' len seed step <- as

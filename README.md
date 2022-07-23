@@ -1,18 +1,19 @@
 # staged-fusion
 
-This is a small experiment about acceptably robust fusion in Haskell. You can
-find examples in [Benchmark](Benchmark.hs).
+This is a small experiment about acceptably robust fusion in Haskell, using
+typed Template Haskell. You can find examples in [Benchmark](Benchmark.hs).
+In the rest of this file I do a moderately edited brain dump.
 
-## Intro
+## Introduction
 
-By fusion, we loosely mean program transformations which remove intermediate
+By fusion we loosely mean program transformations which remove intermediate
 data structures. The `Functor` laws for lists are the archetypal example:
 
     map id = id
     map f . map g = map (f . g)
 
-By rewriting left-to-right along these, we get quite obviously better
-programs.
+By rewriting programs left-to-right along these rules, programs get
+quite obviously better.
 
 So why not just add these rules to a compiler? The biggest concern is that these
 two rules are not nearly general enough, they don't cover enough opportunities
@@ -23,71 +24,75 @@ wide range of functions can be fused.
 
 - In Rust, there's extensive library support for iterators. Functions written
   using iterators are usually fused, but users have to explicitly convert
-  between lists (or arrays etc.) and iterators.
+  between lists (or arrays, etc.) and iterators.
 - With standard GHC lists, there's an *implicit* conversion between plain lists
   and the fusible representation, which is not exposed to end users. Similar
-  practices are in place in `vector` and in pre-2.0 versions of `text`.
+  practices are used in `vector` and in pre-2.0 versions of `text`.
 
 Unfortunately, in actual runtime code, fusible representations usually have
 *worse* performance than plain data representations. So we want to ensure
 that fusible representations are only used at compile time, and they don't
 contaminate optimized code output.
 
-Again unfortunately, there's is no ergonomic mechanism in GHC or Rust to
+Also unfortunately, there's is no nice & principled mechanism in GHC or Rust to
 guarantee that fusible representations are restricted to compile time. It turns
 out that the only reasonably robust solution is to explicitly write
 code-generating code. In GHC we have (typed) Template Haskell for this purpose,
-in Rust we have macros.
+in Rust we have macros, but neither of these implementations are particularly
+nice or principled. This repository uses TH nonetheless.
 
 In GHC, standard list fusion relies on
 - Inlining: fusion fails if certain definitions are not inlined.
 - Rewrite rules: if these are applied in the wrong order, or inlining and
-  rewriting is mixed in the wrong order, fusion fails
-- Definitions being in the right modules: fusion often just plainly [fails
+  rewriting is mixed in the wrong order, fusion fails.
+- Definitions being in the right modules: fusion often [fails
   across module boundaries](https://github.com/sgraf812/foldr-build), because
-  exporting jumbles the correct inlining/rewriting ordering.
+  exporting jumbles the correct ordering of inlining and rewriting.
 - Core simplification:
   - if the simplifier does not appropriately beta-reduce certain function
-    applications, fusion fails. While in inlining we can use the `{-# INLINE
-    #-}` pragma to order GHC around, there's literally no way to force the
+    applications, fusion fails. Remark: while in inlining we can use the `{-#
+    INLINE #-}` pragma to order GHC around, there's no way to force the
     simplifier to do certain beta-reductions.
   - if the simplifier does not know enough about [call
     arities](https://www.joachim-breitner.de/publications/CallArity-TFP.pdf),
     fusion fails.
   - if the simplifier misses an essential [call pattern
     specialization](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.145.7980&rep=rep1&type=pdf),
-    then *certain* kinds of fusion optimizations can partially fail. This is no
+    then *certain* kinds of fusion optimizations can partially fail. This is not
     quite as bad as most fusion failures, but it does perform much worse than
     hand-fused code.
 
 It's no wonder that fusion is notoriously unreliable in Haskell. Just during the
 writing of the benchmark file in this repo, I bumped into four fusion failures
-in basic Haskell list code! For a recent data point, the `text` package dropped
-fusion from its 2.0 release and achieved dramatic performance improvements
-(partially as a result of dropping fusion).
+in basic list-using code! See [`Benchmarks.hs`](Benchmarks.hs). For a recent
+data point, the `text` package dropped fusion from its 2.0 release and achieved
+dramatic performance improvements (partially as a result of dropping fusion).
 
 I present here a fusion library with the following features:
-  - It's far more robust than standard list fusion or `vector`.
-  - It only requires `-O1` compilation. In contrast, `vector` fusion
-    requires call pattern specialization which is enabled in `-O2`.
-	This is a pretty big issue, because `-O2` is not common in
-	Haskell code, and it is actively discouraged in some contexts,
-	for example in Hackage warnings.
-  - Explicitly marks streams as either *push* or *pull*. Push streams
-    support monadic binding but no zipping. Pull streams support zipping but no
-	binding or appending. There's an efficient conversion from pull to push but
-	not the other way around. This is certainly an extra complexity for users,
-	but as a result we get a significant improvement in the range
-	of definable fusing definitions, compared to lists and vectors.
+  - It's far more robust than standard list fusion or `vector`. It's more robust
+    than any fusion implementation that I've seen in Haskell. There are many
+	libraries though that I have not seen.
+  - It only requires `-O1` compilation. In contrast, `vector` fusion requires
+    call pattern specialization which is enabled in `-O2`.  I find this to be an
+    issue, because `-O2` is not common in Haskell code, and it is actively
+    discouraged in some contexts, for example in Hackage warnings.
+  - Explicitly marks streams as either *push* or *pull*. Push streams support
+    monadic binding and appending but no zipping. Pull streams support zipping
+    but no binding or appending. There's an efficient conversion from pull to
+    push but not the other way around. This is certainly an extra complexity for
+    users, but as a result we get a significant improvement in the range of
+    definable fusing definitions, compared to sticking to just push (like GHC
+    lists) or pull (like `vector`).
   - Uses typed TH. It's pretty noisy, and the module restrictions are
-    annoying, but there's no alternative really.
+    annoying, but there isn't really any alternative.
   - The implementation is inspired by two-level type theory (2LTT), which is a
     more expressive and principled system for two-stage compilation than
-    TH. Concretely, I mostly pretended to work in 2LTT instead of in TH when
-    writing the library, and I think that the end result is pretty neat.
+    TH. Concretely, I try to pretend to work in 2LTT and translate 2LTT
+	definitions to TH.
 
-It's worth to give a quick overview of 2LTT before we get to the actual code,
-because it provides a great amount of conceptual clarity.
+It's worth to give a quick overview of 2LTT before we get to the actual code.
+It provides a good amount of conceptual clarity, and it gives us a normative
+guideline to what kind of staged code should make sense.
 
 ## Two-level type theory (2LTT)
 
@@ -104,11 +109,13 @@ In typed TH, for any type `a :: Type`, we have the type of expressions with type
 `a`. In this repo, I call this type `Up a :: Type`, in reference to my 2LTT
 paper, and also because it's a short name. So we have in `Up.hs`:
 
-    type Up a = CodeQ a
+    import Language.Haskell.TH
+
+    type Up = CodeQ
 
 This brings us to the main difference between TH and 2LTT.
 
-In TH, the type of expressions is still `Type`, which means that we can
+In TH, the type of expressions is still in `Type`, which means that we can
 arbitrarily mix together types which are of the form `Up a` and types which are
 not. I can blithely write `f :: Int -> Code Int` or even `forall a. a -> Code a`.
 
@@ -117,15 +124,16 @@ summarize 2LTT primitives below, using TH-like syntax.
 - `Type0` is the type of runtime types. Runtime types can appear in code output,
   and so do programs with runtime types.
 - `Type1` is the type of compile time ("static") types. They cannot appear in code
-  output, nor programs with static types.
+  output, and programs with static types can't either.
 - `Up` lifts `a :: Type0` to `Up a :: Type1`. This means that `Up a`, the type of
   runtime expressions, is restricted to compile time.
 - For `a :: Type0` and `t :: a`, we have `[|| t ||] :: Up a`. This is called *quoting*.
 - For `t :: Up a`, we have `$$t :: a`. This is *splicing*.
 - `Up`, quoting and splicing are the *only* ways to cross between `Type0` and `Type1`.
   All other operations and type formers stay entirely within `Type0` or `Type1`.
-- Quotation is the inverse of splicing (this is more important in dependently
-  typed examples).
+- Quotation is the inverse of splicing. This is more important in dependently
+  typed programs, where quotes and splices can occur in types and the type checker
+  has to compare types for definitional equality.
 
 In 2LTT, we *only* have typing rules; there are no syntactic restrictions and
 there is no distinction between top-level and local things.
@@ -133,15 +141,14 @@ there is no distinction between top-level and local things.
 In TH, we also have that `Up a` is restricted to compile time. However, because
 the system is not typed precisely enough, we have *syntactic* and *scope-based*
 restrictions on what we can do, and we have a distinction between *top-level*
-and *local* things. For example, we can only write a splice (`$$_`) inside a
-quote (`[|| _ ||]`).
+and *local* things.
 
 Another example, for a top-local disambiguation of stages in TH:
 
     e :: Up Bool
 	e = let b = True in [||b||]
 
-Here, `b` is computed at compile time, so when we use in the quotation, it's
+Here, `b` is computed at compile time, so when we use it in the quotation, it's
 implicitly converted to `Up Bool` through the `Lift` typeclass.
 
     b :: Bool
@@ -156,14 +163,14 @@ Here, `b` is a top-level definition which appears in the code output, so
 Let's look at the same in 2LTT. Here, there is no single `Bool` type; we need
 two types if we want to use `Bool` both at runtime and at compile time. So we
 have `Bool0 :: Type0` and `Bool1 :: Type1`. We define a "serialization" function
-first:
+first. Note that we call it `lower` even though in TH it's called `lift`.
 
     lower :: Bool1 -> Up Bool0
 	lower True1  = [||True0||]
 	lower False1 = [||False0||]
 
-This could be overloaded using a typeclass, the same way as
-`Language.Haskell.TH` does. Then the definitions:
+This could be overloaded using a typeclass, the same way as in TH.  Then the
+definitions:
 
     e :: Up Bool0
 	e = let b = True1 in [|| $$(lower b) ||]
@@ -173,7 +180,15 @@ However, since quoting and splicing are inverses, this is just
     e :: Up Bool0
 	e = let b = True1 in lower b
 
-The other version:
+We can move `b` to the top-level and nothing changes:
+
+    b :: Bool1
+    b = True1
+
+	e :: Up Bool0
+	e = lower b
+
+The other code sample:
 
     b :: Bool0
 	b = True0
@@ -187,7 +202,7 @@ The other version:
 Perhaps the biggest weakness of TH is that we can't compute types at compile
 time. In 2LTT, we can, because quoting and splicing can be used on types too.
 For example, if I have `a :: Type0`, then I have `[||a||] :: Up Type0`. This
-makes sense, because just like as in Haskell, I have that `Type0 :: Type0`.  I
+makes sense, because just like as in Haskell, I have that `Type0 :: Type0`. I
 can also use dependent functions to abstract over `Up Type0`. Take the
 compile-time identity function:
 
@@ -212,8 +227,8 @@ of `map`, because there I have to abstract over runtime types.
 
 Now, I can apply `map'` to `[||Bool0||] :: Up Type0`, which is a *type
 expression*. In TH, there's no such thing as a type expression, and types are
-handled in a rather fuzzy manner. We can rewrite the above as follows, and it
-typechecks:
+handled in a rather fuzzy manner. We can rewrite the above in TH as follows, and
+it typechecks:
 
     {-# language TemplateHaskell, RankNTypes, ScopedTypeVariables #-}
 
@@ -246,10 +261,10 @@ dependencies alone, without refering to scoped type variables in annotations,
 then we're fine. Usually a few helper functions or proxies are enough to make
 this work.
 
-In summary, there are very good and deep reasons to treat 2LTT as *the* correct
-theoretical basis of two-stage compilation, and even when writing TH it makes
-sense to pretend to work in 2LTT. Everything which is well-typed in 2LTT is
-necessarily sensible and sound in TH, when it's possible to rewrite it in TH.
+There are good and deep reasons to treat 2LTT as *the* correct theoretical
+basis of two-stage compilation, and even when writing TH it makes sense to
+pretend to work in 2LTT. Everything which is well-typed in 2LTT is necessarily
+sensible and sound in TH, whenever it's possible to rewrite it in TH.
 
 
 ## Fold-based (push) fusion
@@ -260,14 +275,16 @@ representations. It's the one used in GHC for lists.
 As I mentioned, standard list fusion converts from runtime lists to fusible
 lists, does fusion on fusible lists, then converts them back to runtime lists.
 I also mentioned that it's essential that fusible list expressions are fully
-known statically so that they can be computed away at compile time. In GHC, we
-kind of hope that fusible list expressions are statically known.
+known statically so that they can be computed away at compile time. In standard
+GHC list fusion, the best we can do is to hope that fusible list expressions are
+statically known.
 
 Whenever GHC *happens* to be able to fully fuse a program, the same program can
 be written in 2LTT, possibly with some extra staging annotations, and in 2LTT we
 get a *formal guarantee* that everything fuses.
 
-Let's proceed to push fusion. The type of statically known list expressions is
+Let's define the "push" representation. The type of statically known list
+expressions is
 
     Up [a]
 
@@ -381,6 +398,8 @@ implement `zipWith` on `Push` efficiently:
 
     zipWith :: (Up a -> Up b -> Up c) -> Push a -> Push b -> Push c
 
+We'll define `zipWith` instead on the "pull" representation.
+
 
 ## Sugar for `Up` functions
 
@@ -421,7 +440,7 @@ We've seen that zipping is not supported by `Push`. We address this by defining
 `Push`.
 
 `Pull` is the Church-encoding of the *colists*, the possibly infinite
-coinductive lists. This specifies a state machine which contains a starting
+coinductive lists. This corresponds to a state machine which contains a starting
 state and a stepping function:
 
     data Pull a = forall s. Pull {seed :: Up s, step :: Up (s -> Step a s)}
@@ -430,21 +449,19 @@ where
 
     data Step a s = Stop | Yield a s
 
-However, we can improve on the `step` type by distributing `Up`:
+However, we can make `Step` fusible by using Church-coding and distributing `Up`,
+the same way as we did with `Push`.
 
     type Step a s = forall b. Up b -> (Up a -> Up s -> Up b) -> Up b
 
-	step :: Up s -> Step a s
-
-We computed `Up (Step a s)` by taking the Church-encoding of `Step` and
-distributing `Up`, the same way as we did with `Push`.
+    data Pull a = forall s. Pull {seed :: Up s, step :: Up s -> Step a s}
 
 `Pull` works dually to `Push` in the following sense:
 
-- We usually use recursive code when we create a `Push` from non-`Push` things.
-- We usually use recursive code when we compute non-`Pull` things from `Pull`.
+- We usually use recursion when we create a `Push` from non-`Push` things.
+- We usually use recursion when we compute non-`Pull` things from `Pull`.
 
-For example, a strict fold over a `Pull` runs the state machine until it ends:
+For example, a strict fold over a `Pull` runs the state machine until it stops:
 
     foldl :: (Up b -> Up a -> Up b) -> Up b -> Pull a -> Up b
     foldl f b (Pull seed step) = [||
@@ -452,8 +469,8 @@ For example, a strict fold over a `Pull` runs the state machine until it ends:
       in  go $$seed $$b ||]
 
 In the `step` call, the second argument handles the `Stop` case and the third
-the `Yield` case. The `seq b` is needed because TH seems to ignore bang patterns
-in quotes.
+the `Yield` case. The `seq b` is needed because TH seems to sometimes ignore
+bang patterns in quotes.
 
 Conversion to `Push` is exactly the same thing as implementing `foldr`:
 
@@ -474,9 +491,9 @@ definition of `Step`:
 
     data Step a s = Stop | Yield a s | Skip s
 
-Then we take the appropriate Church-coding of this `Up (Step a s)`. With this,
-filtering can be defined as converting all `Yield`-s in the input stream to
-`Skip`-s in the output, whenever the filtering predicate is false.
+The, we take the appropriate fusible representation of `Up (Step a s)`. With
+this, filtering can be defined as converting all `Yield`-s in the input stream
+to `Skip`-s in the output, whenever the filtering predicate is false.
 
 While `Skip` has some advantages, I think that it's significantly simpler to not
 have it. Without `Skip`, filtering can be defined by tail-recursively skipping
@@ -488,8 +505,8 @@ over all filtered values in each step. We write a helper function first:
                        [|| if $$(f a) then $$(yield a s) else go $$s ||]))
        in go $$s ||]
 
-This iterates until the stream ends or we find a yielded value for which the
-predicate holds.
+This iterates until the stream ends or we find a value for which the predicate
+holds.
 
     filter :: (Up a -> Up Bool) -> Pull a -> Pull a
     filter f (Pull seed step) = Pull seed (find f step)
@@ -498,10 +515,11 @@ This definition is generally efficient in practice, and we don't lose any
 "fusion". The only disadvantage is that iterated filtering produces larger than
 optimal code, because each `filter` outputs a separate loop for skipping. I
 don't think it's a big issue, because iterated filtering is not a common
-pattern, and the performance penalty is not too bad.
+pattern, and the performance penalty is not too bad in any case.
 
-Moving to `zipWith`. The idea is to pair up the internal states of two streams.
-For this, it makes sense to use strict pairs and some helpers.
+Moving to `zipWith`. The idea is to pair up the internal states of two streams
+and step them in lockstep. For this, it makes sense to use strict pairs and some
+helpers.
 
     data Pair a b = Pair !a !b
 
@@ -527,7 +545,63 @@ In short, `zipWith` yields if both streams yield, otherwise stops. Here we
 benefit from not having `Skip`, because with `Skip` we'd need to handle nine
 cases instead of four.
 
-With dropping we bump into a GHC-specific problem. Let's do a first attempt:
+### No binding and appending for `Pull`
+
+In this repo we don't have the following operations:
+
+    (<>)  :: Pull a -> Pull a -> Pull a
+	(>>=) :: Pull a -> (a -> Pull b) -> Pull b
+
+Users should instead convert from `Pull` to `Push`, and then bind or append
+there. What's the reason for this?
+
+I won't talk in detail about binding; the main issue is that it requires
+sigma-types in the object language, and Haskell doesn't have sigma-types.
+
+For appending, the issue is that it requires `-O2` for adequate compilation in
+Haskell, because it needs [call pattern specialization]([call pattern
+specialization](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.145.7980&rep=rep1&type=pdf)).
+
+In general, we want to avoid introducing sum types in `Pull` states, and
+appending requires sum types (and binding too). Let's look at the definition for
+appending:
+
+    (<>) :: Pull a -> Pull a -> Pull a
+    (<>) (Pull seed step) (Pull seed' step') =
+      Pull [||Left $$seed||] \s stop yield -> [||
+        case $$s of
+          Left s  -> $$(step  [||s||]
+                              (step' seed' stop \a s -> yield a [||Right $$s||])
+                              \a s -> yield a [||Left $$s||])
+          Right s -> $$(step' [||s||]
+                              stop
+                              \a s -> yield a [||Right $$s||])
+        ||]
+
+The way this works is that the internal state of `xs <> ys` is the sum of the
+states of `xs` and `ys`, and a `Left` state marks that we're processing
+currently `xs`, and `Right` marks that we've finished consuming `xs` and we're
+processing `ys`. The stepper function checks which kind of state we're in and
+dispatches accordingly.
+
+If we write a function which iterates this stepper function, we don't want the
+code output to actually contain pattern matching on `Left` and `Right`. That
+kills any unboxing that could happen in the sub-states, and it has some overhead
+on its own. Instead we want to split the iteration into *two* recursive
+functions. The first function consumes `xs` and calls the second function when
+it finishes. The second function consumes `ys`.
+
+Call pattern specialization can do this kind of transformation. But as I
+mentioned it's an `-O2` optimization. We can turn it on independently of `-O2`,
+but I think that's a fine-print detail that should not be imposed on library
+users, preferably. Library users overwhelmingly use plain `-O1` so fusion
+libraries should work robustly with plain `-O1`.
+
+
+## The code generation monad
+
+Let's look at `drop` for `Pull`. Here be bump into a GHC-specific issue.  Let's
+do a first attempt:
 
     dropState :: Up Int -> (Up s -> Step a s) -> Up s -> Up s
     dropState n step s = [||
@@ -538,31 +612,30 @@ With dropping we bump into a GHC-specific problem. Let's do a first attempt:
     drop :: Up Int -> Pull a -> Pull a
     drop n (Pull seed step) = Pull (dropState n step seed) step
 
-This is a bit similar to filtering. We modify the starting state, by making `n`
-steps. Why is this definition problematic? The reason is GHC's inability to
-perform nested unboxing in return types, as of GHC-9.2.3, although GHC-9.4
-promises this feature. If the stream state is a tuple, which can happen if it's
-a zipped stream, then the result of `go` function in the output code will be
-boxed and then probably immediately unboxed.
+This is a bit similar to filtering. We modify the starting state, by rolling it
+forward by `n` steps. Why is this definition problematic? The reason is GHC's
+inability to perform nested unboxing in return types, as of GHC-9.2.3, although
+GHC-9.4 [does promise this
+feature](https://discourse.haskell.org/t/ghc-9-4-1-rc1-is-now-available/4817). If
+the stream state is a tuple, which can happen if it's a zipped stream, then the
+result of the `go` function will be boxed and then probably immediately unboxed.
 
 This isn't a huge issue, but we can fix it and the fix is interesting and
 more generally applicable, so let's look at it.
-
-## The generation monad
 
 The fix is to introduce a monad whose side effect is outputting code. This
 provides more control over code generation, and in particular we can specify
 *where* to continue inserting code. The solution for `dropState` will be that we
 insert generated code *inside* the base case of tail-recursive `go` definition.
 Instead of returning `seq s s` there, we will have `seq s` followed by the rest
-of whatever code we generate. This means that `s` never appears as the output of
-any recursive function.
+of whatever code we generate. This means that `s` doesn't appear as the output
+type of a recursive function.
 
 We call the generation monad `Gen`:
 
     newtype Gen a = Gen {unGen :: forall r. (a -> Up r) -> Up r}
 
-This is just the CPS'd identity monad, except that we always return in `Up`.
+This is just the CPS'd identity monad + the restriction that we must return in `Up`.
 
     instance Functor Gen where
       fmap f ma = Gen \k -> unGen ma \a -> k (f a)
@@ -589,7 +662,7 @@ insert an object-level binder anywhere:
     ilet' :: Up a -> (Up a -> Gen b) -> Gen b
     ilet' a f = Gen \k -> [|| let x = $$a in seq x $$(unGen (f [||x||]) k) ||]
 
-If we sequence a bunch of `Gen` actions together, each of them might have
+If we sequence a bunch of `Gen` actions together, each of them may have
 the effect of generating some code, and they are performed in order when
 we `run` the action.
 
@@ -599,8 +672,69 @@ all expressions to a variable, and return the list of variables:
     bindAll :: [Up a] -> Gen [Up a]
 	bindAll = mapM (\a -> ilet a pure)
 
-While we're working inside `Gen`, all newly bound variables by `bindAll` are
-just available, and we don't have to explicitly manipulate or maintain scopes at
-all.
+While we're working inside `Gen`, we don't have to explicitly manipulate scopes
+or generate fresh variables, and we have implicit well-typed access to newly
+inserted bound variables.
 
-TODO
+## Push and Pull in the Gen monad
+
+In the actual code here in the repository, I modify the definitions of `Push`
+and `Pull` as follows:
+
+    data Push' a = Push' {
+      len  :: Maybe (Up Int),
+      fold :: forall l. (Up a -> Up l -> Up l) -> Up l -> Up l}
+
+    type Push a = Gen (Push' a)
+
+    type Step a s = forall r. Up r -> (Up a -> Up s -> Up r) -> Up r
+
+    data Pull' a =
+	  forall s. Pull' {len :: Maybe (Up Int), seed :: Up s, step :: Up s -> Step a s}
+
+    type Pull a = Gen (Pull' a)
+
+There are two main differences. First, now both `Push` and `Pull` are wrapped in
+`Gen`. This makes it possible to fix `drop` for `Pull` in the following way:
+
+    dropState :: Up Int -> (Up s -> Step a s) -> Up s -> Gen (Up s)
+    dropState n step s = Gen \ret -> [||
+      let go n s | n <= (0::Int) = seq s $$(ret [||s||])
+                 | otherwise     = $$(step [||s||] (ret [||s||]) (\_ s -> [||go (n - 1) $$s||]))
+      in go $$n $$s ||]
+
+    drop :: Up Int -> Pull a -> Pull a
+    drop n pa = do
+      Pull' len seed step <- pa
+      seed <- dropState n step seed
+      pure $ Pull' (U.max 0 <$> ((-) <$> len <*> Just n)) seed step
+
+Notice that in `dropState`, the usage of `ret` marks where we continue inserting
+generated code. I suggestively name the continuation `ret`, because it works like a
+CPS'd return address.
+
+Second, I extend `Push` and `Pull` with sizing information. `Nothing` marks that
+I don't have static information about sizes. The primary use case is that if we
+know the expression which computes the size of a stream, we can convert them to
+arrays more efficiently because we can allocate the target buffer
+beforehand. This makes it possible to compile mapping and zipping on arrays to
+near-optimal code.
+
+Sometimes I want to force the computation of array sizes just once, instead of
+copying the size-computing expression to multiple places. So I use strict
+let-insertion to force computations. Hence the usage of the `Gen` monad
+in `Push` as well.
+
+It would be feasible to make size computations a lot smarter and also to
+add a lot more annotation to both `Push` and `Pull`.
+
+## Asymmetric zipping
+
+Although we can't zip `Push`, we can zip a `Push` and a `Pull`, and what we get
+is a `Pull`. You can look at `zipWithPull` in [`Push.hs`](Push.hs). The idea is
+that we fold over the `Push` with an accumulator which stores the state of the
+`Pull` stream. At each iteration we can process the next `Push` value and also
+progress the `Pull` machine.
+
+This is an important feature, because *many* practical programs are expressible
+with only asymmetric zipping.
