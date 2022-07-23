@@ -142,7 +142,7 @@ the system is not typed precisely enough, we have *syntactic* and *scope-based*
 restrictions on what we can do, and we have a distinction between *top-level*
 and *local* things.
 
-Another example, for a top-local disambiguation of stages in TH:
+An example for a top-local disambiguation of stages in TH:
 
     e :: Up Bool
 	e = let b = True in [||b||]
