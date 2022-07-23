@@ -397,7 +397,7 @@ implement `zipWith` on `Push` efficiently:
 
     zipWith :: (Up a -> Up b -> Up c) -> Push a -> Push b -> Push c
 
-We'll define `zipWith` instead on the "pull" representation.
+We'll define `zipWith` instead on the "pull" representation a bit later.
 
 
 ## Sugar for `Up` functions
