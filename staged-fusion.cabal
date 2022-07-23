@@ -22,10 +22,13 @@ flag dump
 library
   exposed-modules:
       Benchmark
+      Bug
       Gen
       Internal
+      Notes
       Pull
       Push
+      StaticNotes
       Up
   other-modules:
       Paths_staged_fusion

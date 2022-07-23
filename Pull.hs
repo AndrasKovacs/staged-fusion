@@ -40,7 +40,7 @@ type Step a s = forall r. Up r -> (Up a -> Up s -> Up r) -> Up r
 data Pull' a = forall s. Pull' {len :: Maybe (Up Int), seed :: Up s, step :: Up s -> Step a s}
 type Pull a = Gen (Pull' a)
 
-drop# :: forall s a. Up Int -> (Up s -> Step a s) -> Up s -> Gen (Up s)
+drop# :: Up Int -> (Up s -> Step a s) -> Up s -> Gen (Up s)
 drop# n step s = Gen \ret -> [||
   let go n s | n <= (0::Int) = seq s $$(ret [||s||])
              | otherwise     = $$(step [||s||] (ret [||s||]) (\_ s -> [||go (n - 1) $$s||]))
@@ -101,13 +101,6 @@ zipWith3 f as bs cs = do
         step' bs stop \b bs ->
           step'' cs stop \c cs ->
             yield (f a b c) (U.tup3 as bs cs)
-
-
--- zipWith3 :: (Up a -> Up b -> Up c -> Up d) -> Pull a -> Pull b -> Pull c -> Pull d
--- zipWith3 f as bs cs =
---   Pull.zipWith (\ab c -> [|| case $$ab of (a, b) -> $$(f [||a||] [||b||] c) ||])
---     (Pull.zipWith (\a b -> [|| ($$a, $$b) ||]) as bs) cs
-
 
 
 find# :: (Up a -> Up Bool) -> (Up s -> Step a s) -> Up s -> Step a s
@@ -194,7 +187,11 @@ toList'' pa = run do
   pure [|| let go s = seq s ($$(step [||s||] [||[]||] (\ a s -> [|| ((:) $! $$a) $! (go $$s) ||])))
            in go $$seed ||]
 
-fromAFI :: forall a. Flat a => Up (AFI.Array a) -> Pull a
+
+-- Primitive array conversions
+--------------------------------------------------------------------------------
+
+fromAFI :: Flat a => Up (AFI.Array a) -> Pull a
 fromAFI as =
   ilet' as \as ->
   ilet' [|| AFI.size $$as ||] \size ->
@@ -206,7 +203,7 @@ fromAFI as =
             else $$stop
      ||]
 
-fromALI :: forall a. Up (ALI.Array a) -> Pull a
+fromALI :: Up (ALI.Array a) -> Pull a
 fromALI as =
   ilet' as \as ->
   ilet' [|| ALI.size $$as ||] \size ->
@@ -218,7 +215,7 @@ fromALI as =
             else $$stop
      ||]
 
-toAFI :: forall a. Flat a => Pull a -> Up (AFI.Array a)
+toAFI :: Flat a => Pull a -> Up (AFI.Array a)
 toAFI as = run do
   Pull' len seed step <- as
   case len of
@@ -260,7 +257,7 @@ toAFI as = run do
         in cont $! $$len
       ||]
 
-toALI :: forall a. Pull a -> Up (ALI.Array a)
+toALI :: Pull a -> Up (ALI.Array a)
 toALI as = run do
   Pull' len seed step <- as
   case len of

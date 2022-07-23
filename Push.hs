@@ -208,6 +208,10 @@ zipWithPull f as bs = do
          [|| \s -> seq s $$n ||])
          $$seed ||]
 
+
+-- Primitive array conversions
+--------------------------------------------------------------------------------
+
 fromAFI :: Flat a => Up (AFI.Array a) -> Push a
 fromAFI as =
   ilet' as \as ->
