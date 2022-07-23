@@ -558,8 +558,7 @@ I won't talk in detail about binding; the main issue is that it requires
 sigma-types in the object language, and Haskell doesn't have sigma-types.
 
 For appending, the issue is that it requires `-O2` for adequate compilation in
-Haskell, because it needs [call pattern specialization]([call pattern
-specialization](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.145.7980&rep=rep1&type=pdf)).
+Haskell, because it needs [call pattern specialization](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.145.7980&rep=rep1&type=pdf).
 
 In general, we want to avoid introducing sum types in `Pull` states, and
 appending requires sum types (and binding too). Let's look at the definition for
