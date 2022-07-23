@@ -2,7 +2,6 @@
 
 This is a small experiment about acceptably robust fusion in Haskell, using
 typed Template Haskell. You can find examples in [Benchmark](Benchmark.hs).
-In the rest of this file I do a moderately edited brain dump.
 
 ## Introduction
 
