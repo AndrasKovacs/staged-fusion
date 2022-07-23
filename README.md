@@ -1,7 +1,7 @@
 # staged-fusion
 
 This is a small experiment about acceptably robust fusion in Haskell, using
-typed Template Haskell. You can find examples in [Benchmark](Benchmark.hs).
+typed Template Haskell. You can find examples in [Benchmarks.hs](Benchmark.hs).
 
 ## Introduction
 
