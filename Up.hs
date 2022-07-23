@@ -8,7 +8,7 @@
   This module defines `Up` as a synonym of `CodeQ`, the basic type used in typed
   Template Haskell.  It also redefines a fragment of Prelude where everything is
   lifted to operate on @Up a@ instead of @a@.  The Prelude fragment is rather
-  ad-hoc, guided by I needed in examples and benchmarks.
+  ad-hoc, guided by what I needed to grab in examples and benchmarks.
 -}
 
 module Up (
