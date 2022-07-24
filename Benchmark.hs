@@ -14,6 +14,12 @@ import qualified Push as PS
 import qualified Pull as PL
 import qualified Up as U
 
+import Data.Vector.Unboxed (Vector)
+import qualified Data.Vector.Unboxed as V
+
+import qualified Data.Array.FI as AFI
+import qualified Data.Array.LI as ALI
+
 {-
 Benchmarks, partly by me, partly borrowed from
    - "Stream Fusion, to Completeness": https://arxiv.org/pdf/1612.06668.pdf
@@ -81,6 +87,10 @@ sumList1 = sum
 sumList2 :: [Int] -> Int
 sumList2 xs = sum xs
 
+-- SUCCESS
+sumVec :: Vector Int -> Int
+sumVec = V.sum
+
 
 -- Sum of squares
 --------------------------------------------------------------------------------
@@ -107,6 +117,9 @@ sumOfSquaresList = sum . map (\x -> x * x)
 sumOfSquaresList2 :: [Int] -> Int
 sumOfSquaresList2 xs = sum $ map (\x -> x * x) xs
 
+sumOfSquaresVec :: Vector Int -> Int
+sumOfSquaresVec = V.sum . V.map (\x -> x * x)
+
 
 -- map
 --------------------------------------------------------------------------------
@@ -124,6 +137,16 @@ mapPull xs =
 -- FAIL: the 3 maps are merged to one, but that last map is not inlined.
 mapList :: [Int] -> [Int]
 mapList xs = map (*1) $ map (*2) $ map (*3) xs
+
+-- SUCCESS, but there's some dead code being generated for handling errors which
+-- are not possible.
+mapVec :: Vector Int -> Vector Int
+mapVec xs = V.map (*1) $ V.map (*2) $ V.map (*3) xs
+
+-- SUCCESS
+mapPull' :: AFI.Array Int -> AFI.Array Int
+mapPull' xs = $$(PL.toAFI $ PL.map (*1) $ PL.map (*2) $ PL.map (*3) $ PL.fromAFI [||xs||])
+
 
 -- sum-map
 --------------------------------------------------------------------------------
@@ -155,6 +178,15 @@ sumMapList xs =
   map (*3) $
   xs
 
+-- SUCCESS
+sumMapVec :: Vector Int -> Int
+sumMapVec xs =
+  V.sum $
+  V.map (*1) $
+  V.map (*2) $
+  V.map (*3) $
+  xs
+
 -- filter
 --------------------------------------------------------------------------------
 
@@ -184,6 +216,15 @@ filterList xs =
   filter (< 1) $
   filter (< 2) $
   filter (< 3) $
+  xs
+
+-- SUCCESS
+filterVec :: Vector Int -> Int
+filterVec xs =
+  V.sum $
+  V.filter (< 1) $
+  V.filter (< 2) $
+  V.filter (< 3) $
   xs
 
 -- guard
@@ -240,6 +281,15 @@ dropList x y =
   map (+10) $
   [x..y]
 
+-- SUCCESS with -fspec-constr
+-- FAIL    without
+dropVec :: Int -> Int -> Int
+dropVec x y =
+  V.sum $
+  V.drop 100 $
+  V.map (+10) $
+  V.enumFromTo x y
+
 
 --------------------------------------------------------------------------------
 
@@ -267,6 +317,14 @@ sumOfSquaresEvenList xs =
   filter (\x -> $$(U.even [||x||])) $
   xs
 
+-- SUCCESS
+sumOfSquaresEvenVec :: Vector Int -> Int
+sumOfSquaresEvenVec xs =
+  V.sum $
+  V.map (\x -> x * x) $
+  V.filter (\x -> $$(U.even [||x||])) $
+  xs
+
 --------------------------------------------------------------------------------
 
 -- SUCCESS
@@ -281,13 +339,26 @@ cartList xs ys = sum $ liftM2 (*) xs ys
 --------------------------------------------------------------------------------
 
 -- SUCCESS
-dotProduct :: [Int] -> [Int] -> Int
-dotProduct xs ys = $$(
+dotProductPull :: [Int] -> [Int] -> Int
+dotProductPull xs ys = $$(
   PL.sum $
   PL.zipWith (*)
     (PL.fromList [||xs||])
     (PL.fromList [||ys||])
   )
+
+-- SUCCESS
+dotProductPull' :: AFI.Array Int -> AFI.Array Int -> Int
+dotProductPull' xs ys = $$(
+  PL.sum $
+  PL.zipWith (*)
+    (PL.fromAFI [||xs||])
+    (PL.fromAFI [||ys||])
+  )
+
+-- SUCCESS
+dotProductVec :: Vector Int -> Vector Int -> Int
+dotProductVec xs ys = V.sum $ V.zipWith (*) xs ys
 
 --------------------------------------------------------------------------------
 

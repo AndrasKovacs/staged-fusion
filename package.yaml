@@ -36,5 +36,6 @@ library:
   dependencies:
     - template-haskell
     - primdata
+    - vector
   ghc-options:
     - -O

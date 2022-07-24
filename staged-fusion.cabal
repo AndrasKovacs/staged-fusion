@@ -38,6 +38,7 @@ library
       base >=4.7 && <5
     , primdata
     , template-haskell
+    , vector
   if flag(dump)
     ghc-options: -ddump-simpl -ddump-stg-final -ddump-cmm -dsuppress-all -dno-suppress-type-signatures -ddump-splices -ddump-to-file
   default-language: Haskell2010
