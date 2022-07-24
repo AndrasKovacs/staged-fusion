@@ -63,7 +63,7 @@ In GHC, standard list fusion relies on
 
 It's no wonder that fusion is notoriously unreliable in Haskell. Just during the
 writing of the benchmark file in this repo, I bumped into four fusion failures
-in basic list-using code! See [`Benchmarks.hs`](Benchmarks.hs). For a recent
+in basic list-using code! See [`Benchmark.hs`](Benchmark.hs). For a recent
 data point, the `text` package dropped fusion from its 2.0 release and achieved
 dramatic performance improvements (partially as a result of dropping fusion).
 
