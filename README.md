@@ -3,6 +3,8 @@
 This is a small experiment about acceptably robust fusion in Haskell, using
 typed Template Haskell. You can find examples in [Benchmarks.hs](Benchmark.hs).
 
+The value proposition is that you have to use clunky TH but get the highest possible assurance of fusion.
+
 ## Introduction
 
 By fusion we loosely mean program transformations which remove intermediate
