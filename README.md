@@ -600,7 +600,7 @@ libraries should work robustly with plain `-O1`.
 
 ## The code generation monad
 
-Let's look at `drop` for `Pull`. Here be bump into a GHC-specific issue.  Let's
+Let's look at `drop` for `Pull`. Here we bump into a GHC-specific issue.  Let's
 do a first attempt:
 
     dropState :: Up Int -> (Up s -> Step a s) -> Up s -> Up s
