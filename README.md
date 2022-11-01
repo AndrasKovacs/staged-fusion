@@ -731,7 +731,7 @@ add a lot more annotation to both `Push` and `Pull`.
 ## Asymmetric zipping
 
 Although we can't zip `Push`, we can zip a `Push` and a `Pull`, and what we get
-is a `Pull`. You can look at `zipWithPull` in [`Push.hs`](Push.hs). The idea is
+is a `Push`. You can look at `zipWithPull` in [`Push.hs`](Push.hs). The idea is
 that we fold over the `Push` with an accumulator which stores the state of the
 `Pull` stream. At each iteration we can process the next `Push` value and also
 progress the `Pull` machine.
