@@ -58,7 +58,7 @@ In GHC, standard list fusion relies on
     arities](https://www.joachim-breitner.de/publications/CallArity-TFP.pdf),
     fusion fails.
   - if the simplifier misses an essential [call pattern
-    specialization](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.145.7980&rep=rep1&type=pdf),
+    specialization](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/spec-constr.pdf),
     then *certain* kinds of fusion optimizations can partially fail. This is not
     quite as bad as most fusion failures, but it does perform much worse than
     hand-fused code.
@@ -298,7 +298,7 @@ function arrows. For example, `Up (a -> b)` is isomorphic to `Up a -> Up b`.
 We can define the conversions:
 
     to :: Up (a -> b) -> Up a -> Up b
-	to f a = [|| $$(f $$a) ||]
+	to f a = [|| $$f $$a ||]
 
 	from :: (Up a -> Up b) -> Up (a -> b)
 	from f = [|| \a -> $$(f [||a||]) ||]
@@ -560,7 +560,7 @@ I won't talk in detail about binding; the main issue is that it requires
 sigma-types in the object language, and Haskell doesn't have sigma-types.
 
 For appending, the issue is that it requires `-O2` for adequate compilation in
-Haskell, because it needs [call pattern specialization](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.145.7980&rep=rep1&type=pdf).
+Haskell, because it needs [call pattern specialization](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/spec-constr.pdf).
 
 In general, we want to avoid introducing sum types in `Pull` states, and
 appending requires sum types (and binding too). Let's look at the definition for
