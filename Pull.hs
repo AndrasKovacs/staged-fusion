@@ -29,7 +29,7 @@ import qualified Data.Array.FI as AFI
 import qualified Data.Array.FM as AFM
 import qualified Data.Array.LI as ALI
 import qualified Data.Array.LM as ALM
-import Data.Array.UndefElem
+import Data.Internal.Errors
 
 import Up(Up)
 import qualified Up as U

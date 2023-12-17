@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -24,10 +24,8 @@ library
       Benchmark
       Gen
       Internal
-      Notes
       Pull
       Push
-      StaticNotes
       Up
   other-modules:
       Paths_staged_fusion
@@ -39,6 +37,6 @@ library
     , primdata
     , template-haskell
     , vector
+  default-language: Haskell2010
   if flag(dump)
     ghc-options: -ddump-simpl -ddump-stg-final -ddump-cmm -dsuppress-all -dno-suppress-type-signatures -ddump-splices -ddump-to-file
-  default-language: Haskell2010

@@ -1,9 +1,9 @@
 
-resolver: nightly-2022-07-20
+resolver: lts-21.25
 
 packages:
 - .
 
 extra-deps:
 - git: https://github.com/AndrasKovacs/primdata.git
-  commit: 644230c40c11ff10f04dbd9b00256c6691972594
+  commit: 488d38201d0845a0e4e9e80ce78126ebae77350f
